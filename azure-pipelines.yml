@@ -1,0 +1,89 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+variables:
+- group: IRISBuild  # Found in Library 
+
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.7'
+    addToPath: true
+    architecture: 'x64'
+- task: Bash@3
+  inputs:
+    # install requirements specified in bash script
+    filePath: 'environment_setup/install-requirements.sh'  
+- task: AzureCLI@2
+  displayName: Install Azure CLI'
+  inputs:
+    azureSubscription: 'mlOpsDemo'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: 'az extension add -n azure-cli-ml'
+
+- task: AzureCLI@2
+  displayName: 'Create/Use ML Workspace'
+  inputs:
+    azureSubscription: 'mlOpsDemo'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: 'az ml workspace create -g $(ml.resourceGroup) -w $(ml.workspace) -l $(ml.region) --exist-ok --yes'
+
+- task: AzureCLI@2
+  displayName: 'Create/Use Compute Instance'
+  inputs:
+    azureSubscription: 'mlOpsDemo'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: 'az ml computetarget create amlcompute -g $(ml.resourceGroup) -w $(ml.workspace) -n $(ml.computeName) -s $(ml.computeVMSize) --min-nodes $(ml.computeMinNodes) --max-nodes $(ml.computeMaxNodes) --idle-seconds-before-scaledown $(ml.computeIdleSecs)'
+
+- task: AzureCLI@2
+  displayName: 'Upload data to Blobstore'
+  inputs:
+    azureSubscription: 'mlOpsDemo'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: 'az ml datastore upload -w $(ml.workspace) -g $(ml.resourceGroup) -n $(az ml datastore show-default -g $(ml.resourceGroup) --query name -o tsv) -p data -u irisdata'
+
+- task: Bash@3
+  displayName: 'Create Metadata & Model folders'
+  inputs:
+    targetType: 'inline'
+    script: 'mkdir metadata && mkdir models'
+
+- task: AzureCLI@2
+  displayName: 'IRIS Training'
+  inputs:
+    azureSubscription: 'mlOpsDemo'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: 'az ml run submit-script -g $(ml.resourceGroup) -w $(ml.workspace) -e $(ml.experimentName) --ct $(ml.computeName) -c iris_training --source-directory . --path environment_setup -t ./metadata/run.json iris_training.py --container_name irisdata --input_csv Iris.csv --model_path ./models/iris_model.pkl --artifact_loc ./outputs/models/ --dataset_name iris_ds --dataset_desc "IRIS Data Set"'
+
+- task: AzureCLI@2
+  displayName: 'Register Model in to Model Registry'
+  inputs:
+    azureSubscription: 'mlOpsDemo'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: 'az ml model register -g $(ml.resourceGroup) -w $(ml.workspace) -n IRIS --asset-path outputs/models/ -d "IRIS Decision Tree Classifier" --tag "model"="Decision Tree"  --model-framework Custom -f ./metadata/run.json -t metadata/model.json'
+
+- task: CopyFiles@2
+  inputs:
+    SourceFolder: '$(Build.SourcesDirectory)'
+    Contents: |
+      **/metadata/*
+      **/environment_setup/*
+      **/deployment/*
+      **/inference/*
+      **/tests/smoke/*
+      **/outputs/prediction.csv
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
