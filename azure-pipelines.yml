@@ -3,7 +3,7 @@
 # Add steps that build, run tests, deploy, and more:
 # https://aka.ms/yaml
 variables:
-- group: IRISBuild
+- group: IRISBuild  # Found in Library 
 
 trigger:
 - master
@@ -14,7 +14,7 @@ pool:
 steps:
 - task: UsePythonVersion@0
   inputs:
-    versionSpec: '3.6'
+    versionSpec: '3.7'
     addToPath: true
     architecture: 'x64'
 - task: Bash@3
