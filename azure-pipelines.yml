@@ -49,7 +49,7 @@ steps:
     azureSubscription: 'mlOpsDemo'
     scriptType: 'bash'
     scriptLocation: 'inlineScript'
-    inlineScript: 'az ml datastore upload -w $(ml.workspace) -g $(ml.resourceGroup) -n $(az ml datastore show-default -w $(ml.workspace) -g $(ml.resourceGroup) --query name -o tsv) -p data -u irisdata'
+    inlineScript: 'az ml datastore upload -w $(ml.workspace) -g $(ml.resourceGroup) -n $(az ml datastore show-default -g $(ml.resourceGroup) --query name -o tsv) -p data -u irisdata'
 
 - task: Bash@3
   displayName: 'Create Metadata & Model folders'
